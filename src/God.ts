@@ -1,12 +1,19 @@
 import axios from "axios";
 import { load } from "cheerio";
 import { normalize } from "./utils.js";
+import fs from "fs";
+import { FsAccessFileNotExists } from "./FsAccessFileNotExists.js";
 
 /**
  * God object
  */
 interface God {
   name: string;
+  link: string;
+  prev_god?: string | null;
+  next_god?: string | null;
+  god_icon: string;
+  god_card: string;
   summary: {
     title: string;
     pantheon: string;
@@ -73,6 +80,11 @@ async function getGod(url: string): Promise<God> {
     const $ = load(response.data);
     const godObject = {
       name: normalize($(".title").text()),
+      link: url,
+      prev_god: null,
+      next_god: null,
+      god_icon: "",
+      god_card: $(".infobox > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)").attr("data-src")!.replace(/\/revision.+/g,""),
       summary: {
         title: normalize(
           $(
@@ -209,11 +221,98 @@ async function getGod(url: string): Promise<God> {
   }
 }
 
+interface Erl {
+  code: string;
+  path: string;
+}
+
 /**
  * Get the json array from the gods.
  * @returns {Promise<God[]>} The json array from the gods.
  */
-export async function getListOfGods(): Promise<God[]> {
+export async function _getListOfGods(): Promise<God[]> {
   const listOfGodsUrl = await getListOfGodsUrl();
   return Promise.all(listOfGodsUrl.map((url) => getGod(url)));
+}
+
+export async function getListOfGods() {
+  try {
+    console.log("Getting list of gods...");
+    const gods = await _getListOfGods();
+    console.log("God list retrieved.");
+    const godsWithImages: Promise<God[]> = Promise.all(
+      gods.map(async (god, i) => {
+        let request = await axios.get(god.link);
+        let $ = load(request.data);
+        if (i === 0) {
+          const obj = {
+            ...god,
+            next_god:
+              baseUrl +
+              $(
+                ".blue-window > p:nth-child(1) > span:nth-child(2) > a:nth-child(1)"
+              ).attr("href"),
+          };
+          // obj.god_icon = $(".blue-window > p:nth-child(1) > span:nth-child(2) > span > a > img").attr("src");
+          request = await axios.get(obj.next_god);
+          $ = load(request.data);
+          obj.god_icon = $(
+            ".blue-window > p:nth-child(1) > span:nth-child(1) > span:nth-child(2) > a:nth-child(1) > img:nth-child(1)"
+          ).attr("data-src")!.replace(/\/revision.+/g, "");
+          return obj;
+        }
+        if (i === gods.length - 1) {
+          const obj = {
+            ...god,
+            prev_god:
+              baseUrl +
+              $(
+                ".blue-window > p:nth-child(1) > span:nth-child(1) > a:nth-child(1)"
+              ).attr("href"),
+          };
+          request = await axios.get(obj.prev_god);
+          $ = load(request.data);
+          obj.god_icon = $(
+            ".blue-window > p:nth-child(1) > span:nth-child(2) > span:nth-child(2) > a:nth-child(1) > img:nth-child(1)"
+          ).attr("data-src")!.replace(/\/revision.+/g, "");
+          return obj;
+        }
+        const obj = {
+          ...god,
+          next_god:
+            baseUrl +
+            $(
+              ".blue-window > p:nth-child(1) > span:nth-child(2) > a:nth-child(1)"
+            ).attr("href"),
+          prev_god:
+            baseUrl +
+            $(
+              ".blue-window > p:nth-child(1) > span:nth-child(1) > a:nth-child(1)"
+            ).attr("href"),
+        };
+        request = await axios.get(obj.prev_god);
+        $ = load(request.data);
+        obj.god_icon = $(
+          ".blue-window > p:nth-child(1) > span:nth-child(2) > span:nth-child(2) > a:nth-child(1) > img:nth-child(1)"
+        ).attr("data-src")!.replace(/\/revision.+/g, "");
+        return obj;
+      })
+    );
+    fs.writeFileSync(
+      "./gods.json",
+      JSON.stringify(await godsWithImages, null, 2)
+    );
+  } catch (error) {
+    // AccessSync Error
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      Object.hasOwn(error, "code")
+    ) {
+      const e = <Erl>error;
+      if (typeof e.code === "string" && e.code === "ENOENT") {
+        throw new FsAccessFileNotExists(e.path);
+      }
+    }
+  }
 }
