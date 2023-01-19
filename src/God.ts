@@ -1,9 +1,7 @@
-import axios from "axios";
-import { load } from "cheerio";
-import { normalize } from "./utils.js";
-import fs from "fs";
-import { FsAccessFileNotExists } from "./FsAccessFileNotExists.js";
-
+import { load } from "https://esm.sh/cheerio@1.0.0-rc.12";
+import { normalize } from "./utils.ts";
+import * as fs from "https://deno.land/std@0.173.0/fs/mod.ts";
+import { FsAccessFileNotExists } from "./FsAccessFileNotExists.ts";
 /**
  * God object
  */
@@ -59,8 +57,8 @@ const baseUrl = "https://smite.fandom.com";
  */
 async function getListOfGodsUrl(): Promise<string[]> {
   const url = `${baseUrl}/wiki/List_of_gods`;
-  const response = await axios.get(url);
-  const $ = load(response.data);
+  const response = await fetch(url);
+  const $ = load(await response.text());
   const arrayGods = $(".blue-window > tbody > tr:not(:nth-child(1))")
     .map(
       (i, el) => `${baseUrl}${$(el).find("td:nth-child(2) > a").attr("href")}`
@@ -76,15 +74,19 @@ async function getListOfGodsUrl(): Promise<string[]> {
  */
 async function getGod(url: string): Promise<God> {
   try {
-    const response = await axios.get(url);
-    const $ = load(response.data);
+    const response = await fetch(url);
+    const $ = load(await response.text());
     const godObject = {
       name: normalize($(".title").text()),
       link: url,
       prev_god: null,
       next_god: null,
       god_icon: "",
-      god_card: $(".infobox > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)").attr("data-src")!.replace(/\/revision.+/g,""),
+      god_card: $(
+        ".infobox > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)"
+      )
+        .attr("data-src")!
+        .replace(/\/revision.+/g, ""),
       summary: {
         title: normalize(
           $(
@@ -242,8 +244,8 @@ export async function getListOfGods() {
     console.log("God list retrieved.");
     const godsWithImages: Promise<God[]> = Promise.all(
       gods.map(async (god, i) => {
-        let request = await axios.get(god.link);
-        let $ = load(request.data);
+        let request = await fetch(god.link);
+        let $ = load(await request.text());
         if (i === 0) {
           const obj = {
             ...god,
@@ -254,11 +256,13 @@ export async function getListOfGods() {
               ).attr("href"),
           };
           // obj.god_icon = $(".blue-window > p:nth-child(1) > span:nth-child(2) > span > a > img").attr("src");
-          request = await axios.get(obj.next_god);
-          $ = load(request.data);
+          request = await fetch(obj.next_god);
+          $ = load(await request.text());
           obj.god_icon = $(
             ".blue-window > p:nth-child(1) > span:nth-child(1) > span:nth-child(2) > a:nth-child(1) > img:nth-child(1)"
-          ).attr("data-src")!.replace(/\/revision.+/g, "");
+          )
+            .attr("data-src")!
+            .replace(/\/revision.+/g, "");
           return obj;
         }
         if (i === gods.length - 1) {
@@ -270,11 +274,13 @@ export async function getListOfGods() {
                 ".blue-window > p:nth-child(1) > span:nth-child(1) > a:nth-child(1)"
               ).attr("href"),
           };
-          request = await axios.get(obj.prev_god);
-          $ = load(request.data);
+          request = await fetch(obj.prev_god);
+          $ = load(await request.text());
           obj.god_icon = $(
             ".blue-window > p:nth-child(1) > span:nth-child(2) > span:nth-child(2) > a:nth-child(1) > img:nth-child(1)"
-          ).attr("data-src")!.replace(/\/revision.+/g, "");
+          )
+            .attr("data-src")!
+            .replace(/\/revision.+/g, "");
           return obj;
         }
         const obj = {
@@ -290,17 +296,19 @@ export async function getListOfGods() {
               ".blue-window > p:nth-child(1) > span:nth-child(1) > a:nth-child(1)"
             ).attr("href"),
         };
-        request = await axios.get(obj.prev_god);
-        $ = load(request.data);
+        request = await fetch(obj.prev_god);
+        $ = load(await request.text());
         obj.god_icon = $(
           ".blue-window > p:nth-child(1) > span:nth-child(2) > span:nth-child(2) > a:nth-child(1) > img:nth-child(1)"
-        ).attr("data-src")!.replace(/\/revision.+/g, "");
+        )
+          .attr("data-src")!
+          .replace(/\/revision.+/g, "");
         return obj;
       })
     );
-    fs.writeFileSync(
+    Deno.writeFileSync(
       "./gods.json",
-      JSON.stringify(await godsWithImages, null, 2)
+      new TextEncoder().encode(JSON.stringify(await godsWithImages, null, 2))
     );
   } catch (error) {
     // AccessSync Error
