@@ -1,4 +1,4 @@
-import { getListOfGods } from "./God.js";
+import { getListOfGods } from "./God.ts";
 
 async function main() {
   await getListOfGods();

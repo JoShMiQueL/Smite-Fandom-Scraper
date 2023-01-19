@@ -1,0 +1,1 @@
+Run with: `deno run --allow-net --allow-write .\src\index.ts`
